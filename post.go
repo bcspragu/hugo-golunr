@@ -12,12 +12,13 @@ import (
 )
 
 type Post struct {
-	ID          int      `json:"id"`
+	ID          string   `json:"id"`
 	Title       string   `json:"title"`
 	Description string   `json:"description"`
 	Source      string   `json:"source"`
-	Content     string   `json:"text"`
+	Body        string   `json:"body"`
 	Tags        []string `json:"tags"`
+	Draft       bool
 }
 
 func ParsePost(path string) (*Post, error) {
@@ -33,8 +34,8 @@ func ParsePost(path string) (*Post, error) {
 	}
 
 	body := string(bytes.TrimSpace(rest))
-	body = stripmd.Strip(body)
 	body = striphtml.StripTags(body)
+	body = stripmd.Strip(body)
 
 	var fmErr error
 	getFMString := func(key string) string {
@@ -53,27 +54,72 @@ func ParsePost(path string) (*Post, error) {
 		}
 		return vStr
 	}
-	getFMInt := func(key string) int {
+	getFMStringArray := func(key string) []string {
 		if fmErr != nil {
-			return 0
+			return nil
 		}
 		v, ok := frontMatter[key]
 		if !ok {
 			fmErr = fmt.Errorf("key %q not found", key)
-			return 0
+			return nil
 		}
-		vInt, ok := v.(int)
+		vSlice, ok := v.([]any)
 		if !ok {
 			fmErr = fmt.Errorf("key %q did not have a string value, had %T", key, v)
-			return 0
+			return nil
 		}
-		return vInt
+		var out []string
+		for i, val := range vSlice {
+			vStr, ok := val.(string)
+			if !ok {
+				fmErr = fmt.Errorf("key %q did not have a string value at index %d, had %T", key, i, val)
+				return nil
+			}
+			out = append(out, vStr)
+		}
+		return out
+	}
+	// getFMInt := func(key string) int {
+	// 	if fmErr != nil {
+	// 		return 0
+	// 	}
+	// 	v, ok := frontMatter[key]
+	// 	if !ok {
+	// 		fmErr = fmt.Errorf("key %q not found", key)
+	// 		return 0
+	// 	}
+	// 	vInt, ok := v.(int)
+	// 	if !ok {
+	// 		fmErr = fmt.Errorf("key %q did not have a numeric value, had %T", key, v)
+	// 		return 0
+	// 	}
+	// 	return vInt
+	// }
+	getFMBool := func(key string) bool {
+		if fmErr != nil {
+			return false
+		}
+		v, ok := frontMatter[key]
+		if !ok {
+			fmErr = fmt.Errorf("key %q not found", key)
+			return false
+		}
+		vBool, ok := v.(bool)
+		if !ok {
+			fmErr = fmt.Errorf("key %q did not have a bool value, had %T", key, v)
+			return false
+		}
+		return vBool
 	}
 
 	p := &Post{
-		ID:      getFMInt("id"),
-		Title:   getFMString("title"), // TODO: maybe strip tags?
-		Content: body,
+		ID:          getFMString("id"),
+		Title:       getFMString("title"), // TODO: maybe strip HTML tags, though they look escaped in the headers
+		Description: getFMString("description"),
+		Source:      getFMString("source"),
+		Body:        body,
+		Tags:        getFMStringArray("tags"),
+		Draft:       getFMBool("draft"),
 	}
 	if fmErr != nil {
 		return nil, fmt.Errorf("failed to get front matter values: %w", fmErr)
@@ -106,7 +152,7 @@ func findEndOfFrontMatter(buf []byte) (int, error) {
 		if idx == -1 {
 			return 0, errors.New("failed to find any brackets")
 		}
-		switch buf[idx] {
+		switch buf[idx+prevIdx] {
 		case byte('{'):
 			cnt++
 		case byte('}'):
@@ -117,7 +163,7 @@ func findEndOfFrontMatter(buf []byte) (int, error) {
 		prevIdx += idx + 1
 
 		if cnt == 0 {
-			return idx, nil
+			return prevIdx, nil
 		}
 	}
 }
