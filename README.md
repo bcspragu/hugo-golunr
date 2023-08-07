@@ -1,3 +1,9 @@
+This fork is purpose-built for my use case, which includes:
+
+- Front matter has int `id` and string `description`
+- Front matter is JSON-formatted
+- Titles can include HTML
+
 # `hugo-golunr`, a golang alternative to [hugo-lunr](https://www.npmjs.com/package/hugo-lunr)
 
 As you probably don't like installing node, npm and a ton of packages into your CI, which generates
